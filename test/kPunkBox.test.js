@@ -4,10 +4,11 @@ const { ethers } = require("hardhat");
 let box;
 let nft;
 let owner;
+let minter;
 
 describe("kPunkBox contract testing", () => {
   before(async () => {
-    [owner] = await ethers.getSigners();
+    [owner, minter] = await ethers.getSigners();
     let nftFactory = await ethers.getContractFactory("NFT1");
     let boxFactory = await ethers.getContractFactory("kPunkBox");
 
@@ -16,9 +17,9 @@ describe("kPunkBox contract testing", () => {
     await nft.deployed();
 
     //mint some nfts
-    await nft.mint(1);
-    await nft.mint(2);
-    await nft.mint(3);
+    for (let i = 1; i < 11; i++) {
+      await nft.mint(i);
+    }
 
     box = await boxFactory.deploy(
       "kPunkBox No.1",
@@ -46,22 +47,55 @@ describe("kPunkBox contract testing", () => {
   it("should be able to deposit nft to kPunkBox", async () => {
     // function depositNFT(uint8 _slotId, address _nftAddress, uint256 _tokenId, uint256 _randomness) public nonReentrant onlyOwner
     //approve
-    let slotId = 0;
+    let slotId = [0, 1, 2];
+    let nftId = [1, 2, 3];
     await nft.setApprovalForAll(box.address, true);
-    await box.depositNFT(slotId, nft.address, 1, 1000);
+    for (let i = 0; i < slotId.length; i++) {
+      await box.depositNFT(slotId[i], nft.address, nftId[i], 1000);
+    }
 
     const { nftAddress, tokenId, isLocked, isWon, chance, winner } =
-      await box.list(slotId);
+      await box.list(slotId[0]);
 
-    console.log("slot data:", {
-      nftAddress,
-      tokenId: tokenId.toString(),
-      isLocked,
-      isWon,
-      chance: chance.toString(),
-      winner,
-    });
+    // console.log("slot data:", {
+    //   nftAddress,
+    //   tokenId: tokenId.toString(),
+    //   isLocked,
+    //   isWon,
+    //   chance: chance.toString(),
+    //   winner,
+    // });
 
     expect(nft.address).to.equal(nftAddress);
+    expect((await nft.ownerOf(nftId[0])).toString()).to.equal(box.address);
+  });
+
+  it("should be able to take only 9 slot", async () => {
+    let slotId = [3, 4, 5, 6, 7, 8, 9];
+    let nftId = [4, 5, 6, 7, 8, 9, 10];
+
+    try {
+      await nft.setApprovalForAll(box.address, true);
+
+      for (i = 0; i < slotId.length; i++) {
+        await box.depositNFT(slotId[i], nft.address, nftId[i], 1000);
+      }
+      expect(true);
+    } catch (error) {
+      // console.log("must be invalid slot:", error.message);
+      expect(false);
+    }
+  });
+
+  it("test get randomness result", async () => {
+    let rand = await box.getRandomNumber();
+    console.log(rand.toString());
+  });
+
+  it("should be able to draw NFT from kPunkBox", async () => {
+    await box.connect(minter).draw();
+
+    // const results = await box.results(0);
+    expect((await nft.ownerOf(5)).toString()).to.equal(minter.address);
   });
 });
