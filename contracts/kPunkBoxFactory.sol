@@ -24,7 +24,8 @@ contract kPunkBoxFactory is Ownable, ReentrancyGuard {
     }
 
     //must be array for easier to fetch all boxes
-    mapping(uint256 => Box) public boxes;
+    // mapping(uint256 => Box) public boxes;
+    Box[] public boxes;
     uint256 currentBoxId = 0;
 
     uint256 feePercent = 300;
@@ -36,7 +37,22 @@ contract kPunkBoxFactory is Ownable, ReentrancyGuard {
     event SetFee(uint256 newFee);
     event SetDevAddress(address newAddress);
 
-    constructor() {}
+    constructor() {
+        devAddress = msg.sender;
+    }
+
+    function getAllBoxes() public view returns(Box[] memory) {
+        require(boxes.length > 0 ,"boxes is empty");
+        return boxes;
+    }
+
+    function boxesCount() public view returns(uint256) {
+        if(boxes.length > 0) {
+            return boxes.length;
+        } else {
+            return 0;
+        }
+    }
 
     function createNewBox(string memory _name, string memory _symbol, uint256 _ticketPrice) external nonReentrant {
         require(_ticketPrice > 0, "invalid ticket price");
@@ -46,13 +62,24 @@ contract kPunkBoxFactory is Ownable, ReentrancyGuard {
 
         address newBoxAddress = address(box); 
 
-        boxes[currentBox].name = _name;
-        boxes[currentBox].symbol = _symbol;
-        boxes[currentBox].owner = msg.sender;
-        boxes[currentBox].contractAddress = newBoxAddress;
-        boxes[currentBox].isBanned = false;
-        boxes[currentBox].isApproved = true;
+        // boxes[currentBox].name = _name;
+        // boxes[currentBox].symbol = _symbol;
+        // boxes[currentBox].owner = msg.sender;
+        // boxes[currentBox].contractAddress = newBoxAddress;
+        // boxes[currentBox].isBanned = false;
+        // boxes[currentBox].isApproved = true;
 
+
+        boxes.push(
+            Box (
+                _name,
+                _symbol,
+                msg.sender,
+                newBoxAddress,
+                false,
+                true
+            )
+        );
 
         increaseBoxId();
 
