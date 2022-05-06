@@ -27,7 +27,7 @@ const abi = [
   "function getCurrentBoxId() view returns(uint256)",
 ];
 
-const address = "0xb89425b9f012F8DfaA0DC77ebC4a917EB42ab99F";
+const address = "0x31D9528b45E5bA788b601b37D1BAf301750C4D5d";
 
 export function useFactory() {
   const [contract, setContract] = useState(null);

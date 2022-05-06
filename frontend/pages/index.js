@@ -52,7 +52,7 @@ export default function Home() {
 
   useEffect(() => {
     if ((box.state = ContractState.READY)) {
-      // box.getList();
+      box.getList();
     }
   }, [box.state]);
 
@@ -80,15 +80,17 @@ export default function Home() {
   async function handleDepositNFT(event) {
     event.preventDefault();
     let mock = {
-      slotId: 0,
-      nftAddress: "0xb212d3E437B9E2341516aE31fCE23E124f15aB8b",
-      tokenId: 1,
+      slotId: 1,
+      nftAddress: "0x5bd65f029309bB9ae0d16De97D218CA517D0E563",
+      tokenId: 5,
       randomness: 1000,
     };
+
+    await nft.setApprovalForAll(box, wallet.account);
     await box.depositNFT(
       mock.slotId,
       mock.nftAddress,
-      mock.slotId,
+      mock.tokenId,
       mock.randomness
     );
   }
@@ -189,6 +191,7 @@ function GashaBox({ box }) {
       >
         <div>gasha name: {box.name}</div>
         <div>gasha symbol: {box.symbol}</div>
+        <div>gasha owner: {box.owner}</div>
         <div>gasha nftAddress: {box.contractAddress}</div>
         <button className="bg-amber-500 hover:text-white pl-2 pr-2 pt-1 pb-1 border-2 border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
           draw

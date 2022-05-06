@@ -34,6 +34,7 @@ contract kPunkBoxFactory is Ownable, ReentrancyGuard {
     address devAddress;
 
     event BoxCreated(address indexed owner, uint256 boxId, string name, address contractAddress);
+    event BoxOwnerChanged(address indexed newOwner);
     event SetFee(uint256 newFee);
     event SetDevAddress(address newAddress);
 
@@ -69,6 +70,8 @@ contract kPunkBoxFactory is Ownable, ReentrancyGuard {
         // boxes[currentBox].isBanned = false;
         // boxes[currentBox].isApproved = true;
 
+        box.transferOwnership(msg.sender);
+
 
         boxes.push(
             Box (
@@ -100,6 +103,15 @@ contract kPunkBoxFactory is Ownable, ReentrancyGuard {
         feePercent = _feeAmount;
 
         emit SetFee(_feeAmount);
+    }
+
+    function setBoxOwner(uint256 _boxId, address _owner) public onlyOwner {
+        require(_owner != address(0), "setBoxOwner: cannot set address(0)");
+        require(_boxId < boxes.length, "invalid id");
+
+        boxes[_boxId].owner = _owner;
+
+        emit BoxOwnerChanged(_owner);
     }
 
     function setDevAddress(address _newAddress) public onlyOwner {

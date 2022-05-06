@@ -20,7 +20,7 @@ const abi = [
   "function setTicketPrice(uint256 _price)",
 ];
 
-const address = "0xb39d0000ef11E3D4d850d52893BD1693890448eA";
+const address = "0xcB6635bA42163C0E5f0a17E95a5C6b25044dF463";
 
 export function useBox() {
   const [contract, setContract] = useState(null);
@@ -103,5 +103,6 @@ export function useBox() {
     setTicketPrice,
     getList,
     state: contractState,
+    address,
   };
 }

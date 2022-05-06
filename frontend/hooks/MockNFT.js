@@ -13,9 +13,11 @@ const ContractState = {
 const abi = [
   "function mint()",
   "function getCurrentTokenId() view returns(uint256)",
+  "function setApprovalForAll(address to, bool approved)",
+  "function isApprovedForAll(address owner, address operator) view returns(bool)",
 ];
 
-const address = "0xb212d3E437B9E2341516aE31fCE23E124f15aB8b";
+const address = "0x5bd65f029309bB9ae0d16De97D218CA517D0E563";
 
 export function useNFT() {
   const [contract, setContract] = useState(null);
@@ -44,10 +46,20 @@ export function useNFT() {
     }
   }
 
+  async function setApprovalForAll(box, owner) {
+    const isApproved = await contract.isApprovedForAll(owner, box.address);
+    console.log(isApproved);
+    if (isApproved) {
+      return;
+    }
+    await contract.setApprovalForAll(box.address, true);
+  }
+
   return {
     init,
     mint,
     getCurrentTokenId,
+    setApprovalForAll,
     state: contractState,
   };
 }
