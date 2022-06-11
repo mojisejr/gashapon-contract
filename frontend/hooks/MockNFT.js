@@ -17,7 +17,7 @@ const abi = [
   "function isApprovedForAll(address owner, address operator) view returns(bool)",
 ];
 
-const address = "0x5bd65f029309bB9ae0d16De97D218CA517D0E563";
+const address = "0xf2EC952460fAB962c8d8EBBCe11F5a057BDF232e";
 
 export function useNFT() {
   const [contract, setContract] = useState(null);

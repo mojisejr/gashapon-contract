@@ -80,9 +80,9 @@ export default function Home() {
   async function handleDepositNFT(event) {
     event.preventDefault();
     let mock = {
-      slotId: 1,
-      nftAddress: "0x5bd65f029309bB9ae0d16De97D218CA517D0E563",
-      tokenId: 5,
+      slotId: 2,
+      nftAddress: "0xf2EC952460fAB962c8d8EBBCe11F5a057BDF232e",
+      tokenId: 1,
       randomness: 1000,
     };
 
@@ -93,6 +93,15 @@ export default function Home() {
       mock.tokenId,
       mock.randomness
     );
+  }
+
+  async function handleDraw(event) {
+    event.preventDefault();
+    try {
+      await box.drawWithKUB();
+    } catch (e) {
+      console.log("draw error", e);
+    }
   }
   return (
     <div className="h-screen w-screen space-y-3 mt-5 ml-5">
@@ -111,7 +120,7 @@ export default function Home() {
         <ul className="space-y-2">
           {boxList.map((item, index) => (
             <li key={index}>
-              <GashaBox box={item} />
+              <GashaBox box={item} onDraw={handleDraw} />
             </li>
           ))}
         </ul>
@@ -182,7 +191,7 @@ function DepositNFTForm({ handleDepositSubmit }) {
   );
 }
 
-function GashaBox({ box }) {
+function GashaBox({ box, onDraw }) {
   return (
     <div>
       <div
@@ -193,7 +202,10 @@ function GashaBox({ box }) {
         <div>gasha symbol: {box.symbol}</div>
         <div>gasha owner: {box.owner}</div>
         <div>gasha nftAddress: {box.contractAddress}</div>
-        <button className="bg-amber-500 hover:text-white pl-2 pr-2 pt-1 pb-1 border-2 border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+        <button
+          onClick={onDraw}
+          className="bg-amber-500 hover:text-white pl-2 pr-2 pt-1 pb-1 border-2 border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+        >
           draw
         </button>
       </div>

@@ -15,7 +15,7 @@ const abi = [
   "function depositNFT(uint8 _slotId, address _nftAddress, uint256 _tokenId, uint256 _randomness)",
   "function getWinningRates() view returns(uint256)",
   "function withdrawNFT(uint8 _slotId)",
-  "function drawWithKUB()",
+  "function drawWithKUB() payable",
   "function getBalance() returns(uint256)",
   "function setTicketPrice(uint256 _price)",
 ];
@@ -52,7 +52,13 @@ export function useBox() {
 
   async function drawWithKUB() {
     if (contractState == ContractState.READY) {
-      await contract.drawWithKUB();
+      try {
+        await contract.drawWithKUB({
+          value: ethers.utils.parseEther("0.01", "ether"),
+        });
+      } catch (e) {
+        console.log(e);
+      }
     } else {
       console.log("BOX: contract is not ready");
     }
@@ -83,14 +89,16 @@ export function useBox() {
   }
 
   async function getList() {
-    let max_slot = 9;
-    let list = [];
-    for (let i = 0; i < max_slot; i++) {
-      const currentList = await contract.list(i);
-      list.push(currentList);
-    }
+    if (contractState == ContractState.READY) {
+      let max_slot = 9;
+      let list = [];
+      for (let i = 0; i < max_slot; i++) {
+        const currentList = await contract.list(i);
+        list.push(currentList);
+      }
 
-    console.log("list", list);
+      console.log("list", list);
+    }
   }
 
   return {

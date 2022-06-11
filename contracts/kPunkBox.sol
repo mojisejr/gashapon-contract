@@ -85,6 +85,7 @@ ERC721Holder
         factory = IFactory(_factory);
     }
 
+
     function setTicketPrice(uint256 _price) public onlyOwner {
         require(_price > 0, "setTicketPrice: invalid price");
 
