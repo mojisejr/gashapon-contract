@@ -31,30 +31,23 @@ export default function Home() {
       console.log("wallet connect error");
     }
 
-    console.log(factory.state);
-  }, [wallet.walletState]);
+    if (nft.state === ContractState.READY) {
+      nft.getCurrentTokenId().then((tokenId) => {
+        setCurrentTokenId(tokenId);
+        console.log("currentTokenId", tokenId);
+      });
+    }
 
-  //for nft.contract
-  useEffect(() => {
-    nft.getCurrentTokenId().then((tokenId) => {
-      setCurrentTokenId(tokenId);
-      console.log("currentTokenId", tokenId);
-    });
-  }, [nft.state]);
-
-  useEffect(() => {
-    if (factory.state == ContractState.READY) {
+    if (factory.state === ContractState.READY) {
       factory.getAllBoxes().then((boxes) => {
         setBoxList(boxes);
       });
     }
-  }, [factory.state]);
 
-  useEffect(() => {
-    if ((box.state = ContractState.READY)) {
+    if (box.state === ContractState.READY) {
       box.getList();
     }
-  }, [box.state]);
+  }, [wallet.walletState, nft.state, factory.state, box.state]);
 
   async function handleConnection(event) {
     event.preventDefault();

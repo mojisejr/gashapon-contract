@@ -14,7 +14,7 @@ interface IFactory {
     function devAddress() external pure returns (address);
     function feePercent() external pure returns (uint256);
     function MAX_FEE() external pure returns (uint256);
-    // function randomNonce() external view returns (uint256);
+    function randomNonce() external view returns (uint256);
 }
 
 //Done
@@ -131,8 +131,8 @@ ERC721Holder
     }
 
     //for development purpose
-    function getRandomNumber() public pure returns(uint256) {
-        uint256 rand = uint256(keccak256(abi.encodePacked("seed")));
+    function getRandomNumber() public view returns(uint256) {
+        uint256 rand = uint256(keccak256(abi.encodePacked(block.timestamp, msg.sender, factory.randomNonce(), address(this))));
         return rand.mod(10000);
     }
 
@@ -206,7 +206,6 @@ ERC721Holder
                 if(target > rand && !won) {
                     slot.isWon = true;
                     slot.winner = msg.sender;
-
                     won = true;
                     winningNftAddress = slot.nftAddress;
                     winningSlot = i;

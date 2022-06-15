@@ -31,6 +31,8 @@ contract kPunkBoxFactory is Ownable, ReentrancyGuard {
     uint256 feePercent = 300;
     uint256 MAX_FEE = 1000;
 
+    uint256 public randomNounce;
+
     address devAddress;
 
     event BoxCreated(address indexed owner, uint256 boxId, string name, address contractAddress);
@@ -62,13 +64,6 @@ contract kPunkBoxFactory is Ownable, ReentrancyGuard {
         kPunkBox box = new kPunkBox(_name, _symbol, _ticketPrice, address(this));
 
         address newBoxAddress = address(box); 
-
-        // boxes[currentBox].name = _name;
-        // boxes[currentBox].symbol = _symbol;
-        // boxes[currentBox].owner = msg.sender;
-        // boxes[currentBox].contractAddress = newBoxAddress;
-        // boxes[currentBox].isBanned = false;
-        // boxes[currentBox].isApproved = true;
 
         box.transferOwnership(msg.sender);
 
@@ -120,6 +115,11 @@ contract kPunkBoxFactory is Ownable, ReentrancyGuard {
 
         emit SetDevAddress(_newAddress);
     }
+
+    function getNewNounce(uint256 _nounce) external onlyOwner {
+        randomNounce = _nounce;
+    }
+
     
     function getCurrentBoxId() public view returns(uint256) {
         return currentBoxId + 1;
