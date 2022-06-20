@@ -8,12 +8,12 @@ require("@nomiclabs/hardhat-waffle");
  */
 module.exports = {
   defaultNework: "localhost",
-  networks: {
-    bitkubTestnet: {
-      url: "https://rpc-testnet.bitkubchain.io",
-      accounts: [process.env.deployer],
-    },
-  },
+  // networks: {
+  //   bitkubTestnet: {
+  //     url: "https://rpc-testnet.bitkubchain.io",
+  //     accounts: [process.env.deployer],
+  //   },
+  // },
   solidity: {
     version: "0.8.7",
     settings: {

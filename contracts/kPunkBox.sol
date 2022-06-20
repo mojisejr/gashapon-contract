@@ -1,247 +1,396 @@
-//SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
-import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+import "@openzeppelin/contracts/utils/introspection/ERC165Storage.sol";
+
+
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
+
 interface IFactory {
-    function devAddress() external pure returns (address);
-    function feePercent() external pure returns (uint256);
-    function MAX_FEE() external pure returns (uint256);
-    function randomNonce() external view returns (uint256);
+  function devAddr() external pure returns (address);
+
+  function feePercent() external pure returns (uint256);
+
+  function MAX_FEE() external pure returns (uint256);
+
+  function randomNonce() external view returns (uint256);
+
 }
 
-//Done
-//1 deposit NFT to the gashapon 
-//2 widraw NFT from not empty slot
-//3 draw NFT from gashapon
-//4 check contract balance (KUB)
-//5 update ticket price 
-//6 withdraw ETH and ERC20 from contract
-//7 check winning rate from avaliable gashapon
 
-
-contract kPunkBox is Ownable,
-ReentrancyGuard,
-IERC721Receiver,
-ERC165,
-ERC721Holder
+contract LuckBox is
+  Ownable,
+  ReentrancyGuard,
+  IERC721Receiver,
+  ERC165Storage,
+  ERC721Holder
 {
+  using SafeERC20 for IERC20;
+  using SafeMath for uint256;
+  // for identification purposes
+  string public name;
+  string public symbol;
 
+  uint256 public ticketPrice;
 
-    using SafeMath for uint256;
+  // Slot info
+  struct Slot {
+    address assetAddress;
+    uint256 tokenId;
+    bool locked;
+    uint256 randomnessChance;
+    bool pendingWinnerToClaim;
+    address winner;
+  }
 
-    //Box Info
-    string public name;
-    string public symbol;
-    uint256 public ticketPrice;
-    IFactory factory;
+  mapping(uint8 => Slot) public list;
 
-    //MAX slot is 9
-    struct Slot {
-        address nftAddress;
-        uint256 tokenId;
-        bool isLocked; //false: empty, true: occupied
-        bool isWon;
-        uint256 chance;
-        address winner;
+  // History data
+  struct Result {
+    bytes32 requestId;
+    address drawer;
+    bool won;
+    uint8 slot;
+    uint256 output;
+    uint256 eligibleRange;
+  }
+
+  mapping(uint256 => Result) public result;
+  uint256 public resultCount;
+
+  // Reserve slots
+  struct ReserveNft {
+    address assetAddress;
+    uint256 randomnessChance;
+    uint256 tokenId;
+  }
+
+  mapping(uint256 => ReserveNft) public reserveQueue;
+  uint256 public firstQueue = 1;
+  uint256 public lastQueue = 0;
+
+  uint8 public constant MAX_SLOT = 9;
+
+  // factory address
+  IFactory public factory;
+
+  event UpdatedTicketPrice(uint256 ticketPrice);
+  event Draw(address indexed drawer, bytes32 requestId);
+  event ClaimNft(address indexed receiver, address factory, address tokenId);
+  event DepositedNft(
+    uint8 slotId,
+    address assetAddress,
+    uint256 tokenId,
+    uint256 randomness
+  );
+  event WithdrawnNft(uint8 slotId);
+  event Drawn(
+    address indexed drawer,
+    bool won,
+    address assetAddress,
+    uint256 tokenId
+  );
+  event Claimed(uint8 slotId, address winner);
+  event StackedNft(
+    address assetAddress,
+    uint256 tokenId,
+    uint256 randomness
+  );
+
+  constructor(
+    string memory _name,
+    string memory _symbol,
+    uint256 _ticketPrice,
+    address _factory
+  ) {
+    require(_ticketPrice != 0, "Invalid ticket price");
+
+    name = _name;
+    symbol = _symbol;
+    ticketPrice = _ticketPrice;
+    factory = IFactory(_factory);
+    _registerInterface(IERC721Receiver.onERC721Received.selector);
+  }
+
+  // pays $MATIC to draws a gacha
+  function draw() public payable nonReentrant {
+    require(msg.value == ticketPrice, "Payment is not attached");
+
+    if (address(factory) != address(0)) {
+      uint256 feeAmount = ticketPrice.mul(factory.feePercent()).div(10000);
+      _safeTransferETH(factory.devAddr(), feeAmount);
     }
 
-    mapping(uint8 => Slot) public list;
-    uint8 public MAX_SLOT = 9;
+    uint256 hashRandomNumber = uint256(
+      keccak256(
+        abi.encodePacked(block.timestamp, msg.sender, factory.randomNonce(), address(this))
+      )
+    );
 
+    _draw(hashRandomNumber, msg.sender, "0x00");
 
-    struct Result {
-        address drawer;
-        uint256 tokenId;
-        uint256 drawTimestamp;
-        bool isWon;
-        uint256 chance;
-        uint256 eligibleRange;
+    emit Draw(msg.sender, "0x00");
+  }
+
+  // find the current winning rates
+  function winningRates() public view returns (uint256) {
+    uint256 increment = 0;
+    for (uint8 i = 0; i < MAX_SLOT; i++) {
+      Slot storage slot = list[i];
+
+      if (slot.locked && slot.pendingWinnerToClaim == false) {
+        increment += slot.randomnessChance;
+      }
+    }
+    return increment;
+  }
+
+  function parseRandomUInt256(uint256 input) public pure returns (uint256) {
+    return _parseRandomUInt256(input);
+  }
+
+  // check total ETH locked in the contract
+  function totalEth() public view returns (uint256) {
+    return address(this).balance;
+  }
+
+  // make a claim for an eligible winner
+  function _claimNft(uint8 _slotId) internal {
+    require(MAX_SLOT > _slotId, "Invalid slot ID");
+    require(list[_slotId].locked == true, "The slot is empty");
+    require(list[_slotId].pendingWinnerToClaim == true, "Still has no winner");
+    require(list[_slotId].winner == msg.sender, "The caller is not the winner");
+
+    IERC721(list[_slotId].assetAddress).safeTransferFrom(
+        address(this),
+        msg.sender,
+        list[_slotId].tokenId
+    );
+
+    list[_slotId].locked = false;
+    list[_slotId].assetAddress = address(0);
+    list[_slotId].tokenId = 0;
+    list[_slotId].randomnessChance = 0;
+    list[_slotId].pendingWinnerToClaim = false;
+    list[_slotId].winner = address(0);
+
+    if (lastQueue > firstQueue) {
+      ReserveNft memory reserve = _dequeue();
+
+      list[_slotId].locked = true;
+      list[_slotId].assetAddress = reserve.assetAddress;
+      list[_slotId].tokenId = reserve.tokenId;
+      list[_slotId].randomnessChance = reserve.randomnessChance;
+      list[_slotId].pendingWinnerToClaim = false;
+      list[_slotId].winner = address(0);
+    }
+    emit Claimed(_slotId, msg.sender);
+  }
+
+  // ONLY OWNER CAN PROCEED
+
+  // for local testing
+  // _randomNumber must be in between 0 - 2^10**256
+  function forceDraw(uint256 _randomNumber)
+    public
+    payable
+    onlyOwner
+    nonReentrant
+  {
+    require(msg.value == ticketPrice, "Payment is not attached");
+
+    if (address(factory) != address(0)) {
+      uint256 feeAmount = ticketPrice.mul(factory.feePercent()).div(10000);
+      _safeTransferETH(factory.devAddr(), feeAmount);
     }
 
-    mapping(uint256 => Result) public results;
-    uint256 resultCount = 0;
+    _draw(_randomNumber, msg.sender, "0x00");
+  }
 
+  function withdrawAllEth() public onlyOwner nonReentrant {
+    uint256 amount = address(this).balance;
+    _safeTransferETH(msg.sender, amount);
+  }
 
-    event DepositedNFT(uint8 slotId, address nftAddress, uint256 tokenId, uint256 randomness);
-    event Draw(address indexed drawer);
-    event Drawn(address indexed drawer, bool won, address nftAddress, uint256 tokenId);
-    event WithdrawnNFT(uint8 slotId);
-    event UpdateTicketPrice(uint256 newPrice);
-    event ERC20Withdrawn(uint256 amounts, address to);
-    event KUBWithdrawn(uint256 amounts, address to);
+  function setTicketPrice(uint256 _ticketPrice) public onlyOwner nonReentrant {
+    require(_ticketPrice != 0, "Invalid ticket price");
 
-    constructor(string memory _name, string memory _symbol, uint256 _ticketPrice, address _factory) { 
-        name = _name;
-        symbol = _symbol;
-        ticketPrice = _ticketPrice;
-        factory = IFactory(_factory);
-    }
+    ticketPrice = _ticketPrice;
+    emit UpdatedTicketPrice(_ticketPrice);
+  }
 
+  // randomness value -> 1% = 100, 10% = 1000 and not allows more than 10% per each slot
+  function depositNft(
+    uint8 _slotId,
+    uint256 _randomness,
+    address _assetAddress,
+    uint256 _tokenId
+  ) public nonReentrant onlyOwner {
+    require(MAX_SLOT > _slotId, "Invalid slot ID");
+    require(
+      2000 >= _randomness && _randomness >= 1,
+      "Randomness value must be between 0-2000"
+    );
+    // require(_is1155 == false, "Not supported ERC-1155 yet");
+    require(list[_slotId].locked == false, "The slot is occupied");
 
-    function setTicketPrice(uint256 _price) public onlyOwner {
-        require(_price > 0, "setTicketPrice: invalid price");
+    // take the NFT
+    IERC721(_assetAddress).safeTransferFrom(
+        msg.sender,
+        address(this),
+        _tokenId
+    );
 
-        ticketPrice = _price;
+    list[_slotId].locked = true;
+    list[_slotId].assetAddress = _assetAddress;
+    list[_slotId].tokenId = _tokenId;
+    list[_slotId].randomnessChance = _randomness;
+    list[_slotId].pendingWinnerToClaim = false;
 
-        emit UpdateTicketPrice(_price);
-    }
+    emit DepositedNft(_slotId, _assetAddress, _tokenId, _randomness);
+  }
 
-    function withdrawAllKUB() public payable nonReentrant onlyOwner {
-        uint256 amounts = address(this).balance;
-        _safeTransferETH(msg.sender, amounts);
-    }
+  function withdrawNft(uint8 _slotId) public nonReentrant onlyOwner {
+    require(MAX_SLOT > _slotId, "Invalid slot ID");
+    require(list[_slotId].locked == true, "The slot is empty");
+    require(
+      list[_slotId].pendingWinnerToClaim == false,
+      "The asset locked is being claimed by the winner"
+    );
 
-    function withdrawAllERC20(address _erc20) public nonReentrant onlyOwner {
-        IERC20 erc20 = IERC20(_erc20);
-        uint256 amounts = erc20.balanceOf(address(this));
-        require(amounts > 0, "withdrawAllERC20: nothing in this contract");
+    IERC721(list[_slotId].assetAddress).safeTransferFrom(
+        address(this),
+        msg.sender,
+        list[_slotId].tokenId
+    );
 
-        erc20.transfer(msg.sender, amounts);
+    list[_slotId].locked = false;
+    list[_slotId].assetAddress = address(0);
+    list[_slotId].tokenId = 0;
+    list[_slotId].randomnessChance = 0;
+    list[_slotId].pendingWinnerToClaim = false;
 
-        emit ERC20Withdrawn(amounts, msg.sender);
-    }
+    emit WithdrawnNft(_slotId);
+  }
 
-    function getBalance() public view returns(uint256) {
-        return address(this).balance;
-    }
+  function stackNft(
+    address _assetAddress,
+    uint256 _randomness,
+    uint256 _tokenId
+  ) public {
+    // take the NFT
+    IERC721(_assetAddress).safeTransferFrom(
+        msg.sender,
+        address(this),
+        _tokenId
+    );
 
-    function depositNFT(uint8 _slotId, address _nftAddress, uint256 _tokenId, uint256 _randomness) public nonReentrant onlyOwner {
-        require(_slotId < MAX_SLOT, "depositNFT: invalid slot Id.");
-        require(!list[_slotId].isLocked, "depositNFT: this slot is occupied");
-        require(_randomness > 0 && _randomness < 2001, "depositNFT: randomness cannot more than 2000");
+    ReserveNft memory reserve = ReserveNft({
+      assetAddress: _assetAddress,
+      randomnessChance: _randomness,
+      tokenId: _tokenId
+    });
 
-        IERC721(_nftAddress).safeTransferFrom(msg.sender, address(this), _tokenId);
+    _enqueue(reserve);
 
-        list[_slotId].nftAddress = _nftAddress;
-        list[_slotId].tokenId = _tokenId;
-        list[_slotId].isLocked = true;
-        list[_slotId].isWon = false;
-        list[_slotId].chance = _randomness;
-        list[_slotId].winner = address(0);
+    emit StackedNft(_assetAddress, _tokenId, _randomness);
+  }
 
-        emit DepositedNFT(_slotId, _nftAddress, _tokenId, _randomness);
-    }
+  function withdrawERC20(address _tokenAddress, uint256 _amount)
+    public
+    onlyOwner
+  {
+    IERC20(_tokenAddress).safeTransfer(msg.sender, _amount);
+  }
 
-    //for development purpose
-    function getRandomNumber() public view returns(uint256) {
-        uint256 rand = uint256(keccak256(abi.encodePacked(block.timestamp, msg.sender, factory.randomNonce(), address(this))));
-        return rand.mod(10000);
-    }
+  function withdrawERC721(address _tokenAddress, uint256 _tokenId)
+    public
+    onlyOwner
+  {
+    IERC721(_tokenAddress).safeTransferFrom(
+      address(this),
+      msg.sender,
+      _tokenId
+    );
+  }
+  // PRIVATE FUNCTIONS
 
-    function getWinningRates() public view returns(uint256) {
-        uint256 increment = 0;
-        for(uint8 i = 0; i < MAX_SLOT;) {
-            Slot memory slot = list[i];
+  function _parseRandomUInt256(uint256 input) internal pure returns (uint256) {
+    return input.mod(10000);
+  }
 
-            if(slot.isLocked && !slot.isWon) {
-                increment += slot.chance;
-            }
-            unchecked {
-                ++i;
-            }
+  function _draw(
+    uint256 _randomNumber,
+    address _drawer,
+    bytes32 _requestId
+  ) internal {
+    uint256 parsed = _parseRandomUInt256(_randomNumber); // parse into 0-10000 or 0.00-100.00%
+    uint256 increment = 0;
+    bool won = false;
+    uint8 winningSlot = 0;
+    address winningAssetAddress = address(0);
+    uint256 winningTokenId = 0;
+
+    for (uint8 i = 0; i < MAX_SLOT; i++) {
+      Slot storage slot = list[i];
+      if (slot.locked && slot.pendingWinnerToClaim == false) {
+        increment += slot.randomnessChance;
+        // keep incrementing until the random number has been hitted
+        if (increment > parsed && !won) {
+          slot.pendingWinnerToClaim = true;
+          slot.winner = _drawer;
+
+          won = true;
+          winningSlot = i;
+          winningAssetAddress = slot.assetAddress;
+          winningTokenId = slot.tokenId;
+          _claimNft(winningSlot);
         }
-
-        return increment;
+      }
     }
 
-    function withdrawNFT(uint8 _slotId) public nonReentrant onlyOwner {
-        //1 won token cannot be withdrawn
-        //2 only available slot could be withdrawn
-        require(_slotId < MAX_SLOT, "invalid slot id");
-        require(list[_slotId].isLocked, "withdrawNFT: this slot is empty");
-        require(!list[_slotId].isWon, "withdrawNFT: Won slot could not be withdrawn");
+    // keep track of the result
+    result[resultCount].requestId = _requestId;
+    result[resultCount].drawer = _drawer;
+    result[resultCount].won = won;
+    result[resultCount].slot = winningSlot;
+    result[resultCount].output = parsed;
+    result[resultCount].eligibleRange = increment;
 
-        IERC721(list[_slotId].nftAddress).safeTransferFrom(address(this), msg.sender, list[_slotId].tokenId);
+    resultCount += 1;
 
+    emit Drawn(_drawer, won, winningAssetAddress, winningTokenId);
+  }
 
-        //3 clear slot after nft has withdrawn
-        list[_slotId].isLocked = false;
-        list[_slotId].nftAddress = address(0);
-        list[_slotId].tokenId = 0;
-        list[_slotId].chance = 0;
-        list[_slotId].winner = address(0);
+  function _enqueue(ReserveNft memory _data) private {
+    lastQueue += 1;
+    reserveQueue[lastQueue] = _data;
+  }
 
-        emit WithdrawnNFT(_slotId);
-    }
+  function _dequeue() private returns (ReserveNft memory) {
+    require(lastQueue >= firstQueue); // non-empty queue
 
-    // function drawWithERC20() public nonReentrant{
-    //     _draw();
-    // }
+    ReserveNft memory data = ReserveNft({
+      assetAddress: reserveQueue[firstQueue].assetAddress,
+      randomnessChance: reserveQueue[firstQueue].randomnessChance,
+      tokenId: reserveQueue[firstQueue].tokenId
+    });
 
-    function drawWithKUB () payable public nonReentrant {
-        require(msg.value == ticketPrice, "drawWithKUB: invalid price");
-        
-        //fee operate here
-        if (address(factory) != address(0)) {
-            uint256 feeAmount = ticketPrice.mul(factory.feePercent()).div(10000);
-            _safeTransferETH(factory.devAddress(), feeAmount);
-        }
+    delete reserveQueue[firstQueue];
+    firstQueue += 1;
+    return data;
+  }
 
-        _draw();
-
-        emit Draw(msg.sender);
-    }
-
-    function _draw() internal {
-
-        uint256 rand = getRandomNumber();
-        uint256 target = 0;
-        bool won = false;
-        address winningNftAddress = address(0);
-        uint8 winningSlot = 0;
-        uint256 winningTokenId = 0; 
-
-        for (uint8 i = 0; i < MAX_SLOT;) {
-            Slot storage slot = list[i];
-            if(slot.isLocked && !slot.isWon)  {
-                target += slot.chance;
-                if(target > rand && !won) {
-                    slot.isWon = true;
-                    slot.winner = msg.sender;
-                    won = true;
-                    winningNftAddress = slot.nftAddress;
-                    winningSlot = i;
-                    winningTokenId = slot.tokenId;
-                    claimNFT(winningSlot);
-                }
-            }
-            unchecked {
-                ++i;
-            }
-        }
-
-        results[resultCount].drawer = msg.sender;
-        results[resultCount].tokenId = winningTokenId;
-        results[resultCount].drawTimestamp = block.timestamp;
-        results[resultCount].isWon = won;
-        results[resultCount].chance = rand;
-        results[resultCount].eligibleRange = target;
-
-        ++resultCount;
-
-        emit Drawn(msg.sender, won, winningNftAddress, winningTokenId);
-    }
-
-    //must be internal on production
-    function claimNFT(uint8 slotId) public {
-        require(list[slotId].isLocked, "ClaimNFT: this slot is empty");
-        require(list[slotId].isWon, "ClaimNFT: only won nft is claimable");
-        require(list[slotId].winner == msg.sender, "ClaimNFT: only winner could be able to claim");
-
-
-        IERC721(list[slotId].nftAddress).safeTransferFrom(address(this), msg.sender, list[slotId].tokenId);
-    }
-
-    function _safeTransferETH(address to, uint256 value) internal {
-        (bool success, ) = to.call{ value: value }(new bytes(0));
-        require(success, "TransferHelper::safeTransferETH: ETH transfer failed");
-    }
+  function _safeTransferETH(address to, uint256 value) internal {
+    (bool success, ) = to.call{ value: value }(new bytes(0));
+    require(success, "TransferHelper::safeTransferETH: ETH transfer failed");
+  }
 }
