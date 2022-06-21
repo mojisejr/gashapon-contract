@@ -377,9 +377,26 @@ contract LuckBox is
     bytes32 _requestId
   ) internal {
 
+    //random the slot number of the available array
     uint256 winningSlot = _parseRandomUInt256(_randomNumber); //random slot 
+    //prepare the slot array
+    uint256[] memory availableSlot = new uint256[](nftInSlotCount);
 
-    _claimNft(winningSlot);
+    //loop and check if the slot is empty or not?, if not push it to array
+    for(uint256 i = 0; i < MAX_SLOT;) {
+      if(list[i].locked == true) {
+        availableSlot[i] = i;
+      }
+      unchecked {
+         ++i;
+      }
+    }
+
+    //get slot tobe claimed
+    uint256 tobeClaimed = availableSlot[winningSlot];
+
+    //inner claim function with won slot
+    _claimNft(tobeClaimed);
 
     // keep track of the result
     result[resultCount].requestId = _requestId;
