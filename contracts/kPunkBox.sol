@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/utils/introspection/ERC165Storage.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -21,7 +22,7 @@ interface IFactory {
 
   function MAX_FEE() external pure returns (uint256);
 
-  function randomNonce() external view returns (uint256);
+  function randomNonce() external view returns (bytes32);
 
 }
 
@@ -46,21 +47,18 @@ contract LuckBox is
     address assetAddress;
     uint256 tokenId;
     bool locked;
-    uint256 randomnessChance;
     bool pendingWinnerToClaim;
     address winner;
   }
 
-  mapping(uint8 => Slot) public list;
+  mapping(uint256 => Slot) public list;
 
   // History data
   struct Result {
     bytes32 requestId;
     address drawer;
     bool won;
-    uint8 slot;
-    uint256 output;
-    uint256 eligibleRange;
+    uint256 slot;
   }
 
   mapping(uint256 => Result) public result;
@@ -69,7 +67,6 @@ contract LuckBox is
   // Reserve slots
   struct ReserveNft {
     address assetAddress;
-    uint256 randomnessChance;
     uint256 tokenId;
   }
 
@@ -77,7 +74,9 @@ contract LuckBox is
   uint256 public firstQueue = 1;
   uint256 public lastQueue = 0;
 
-  uint8 public constant MAX_SLOT = 9;
+  uint256 public constant MAX_SLOT = 9;
+
+  uint256 nftInSlotCount;
 
   // factory address
   IFactory public factory;
@@ -86,23 +85,21 @@ contract LuckBox is
   event Draw(address indexed drawer, bytes32 requestId);
   event ClaimNft(address indexed receiver, address factory, address tokenId);
   event DepositedNft(
-    uint8 slotId,
+    uint256 slotId,
     address assetAddress,
-    uint256 tokenId,
-    uint256 randomness
+    uint256 tokenId
   );
-  event WithdrawnNft(uint8 slotId);
+  event WithdrawnNft(uint256 slotId);
   event Drawn(
     address indexed drawer,
     bool won,
     address assetAddress,
     uint256 tokenId
   );
-  event Claimed(uint8 slotId, address winner);
+  event Claimed(uint256 slotId, address winner);
   event StackedNft(
     address assetAddress,
-    uint256 tokenId,
-    uint256 randomness
+    uint256 tokenId
   );
 
   constructor(
@@ -121,8 +118,10 @@ contract LuckBox is
   }
 
   // pays $MATIC to draws a gacha
-  function draw() public payable nonReentrant {
+  function draw(bytes32[] memory proofs, bytes32 leafNode) public payable nonReentrant {
     require(msg.value == ticketPrice, "Payment is not attached");
+    require(proofs.length > 0, "invalid proofs");
+    require(MerkleProof.verify(proofs, factory.randomNonce(), leafNode), 'invalid merkle info');
 
     if (address(factory) != address(0)) {
       uint256 feeAmount = ticketPrice.mul(factory.feePercent()).div(10000);
@@ -131,7 +130,7 @@ contract LuckBox is
 
     uint256 hashRandomNumber = uint256(
       keccak256(
-        abi.encodePacked(block.timestamp, msg.sender, factory.randomNonce(), address(this))
+        abi.encodePacked(block.timestamp, msg.sender, factory.randomNonce(), leafNode, address(this))
       )
     );
 
@@ -140,20 +139,20 @@ contract LuckBox is
     emit Draw(msg.sender, "0x00");
   }
 
-  // find the current winning rates
-  function winningRates() public view returns (uint256) {
-    uint256 increment = 0;
-    for (uint8 i = 0; i < MAX_SLOT; i++) {
-      Slot storage slot = list[i];
+  // // find the current winning rates
+  // function winningRates() public view returns (uint256) {
+  //   uint256 increment = 0;
+  //   for (uint8 i = 0; i < MAX_SLOT; i++) {
+  //     Slot storage slot = list[i];
 
-      if (slot.locked && slot.pendingWinnerToClaim == false) {
-        increment += slot.randomnessChance;
-      }
-    }
-    return increment;
-  }
+  //     if (slot.locked && slot.pendingWinnerToClaim == false) {
+  //       increment += slot.randomnessChance;
+  //     }
+  //   }
+  //   return increment;
+  // }
 
-  function parseRandomUInt256(uint256 input) public pure returns (uint256) {
+  function parseRandomUInt256(uint256 input) public view returns (uint256) {
     return _parseRandomUInt256(input);
   }
 
@@ -163,11 +162,12 @@ contract LuckBox is
   }
 
   // make a claim for an eligible winner
-  function _claimNft(uint8 _slotId) internal {
+  function _claimNft(uint256 _slotId) internal {
     require(MAX_SLOT > _slotId, "Invalid slot ID");
     require(list[_slotId].locked == true, "The slot is empty");
     require(list[_slotId].pendingWinnerToClaim == true, "Still has no winner");
     require(list[_slotId].winner == msg.sender, "The caller is not the winner");
+    require(nftInSlotCount > 0, "no nft to be claimed");
 
     IERC721(list[_slotId].assetAddress).safeTransferFrom(
         address(this),
@@ -175,20 +175,23 @@ contract LuckBox is
         list[_slotId].tokenId
     );
 
+    //update current avaliable nft amount
+    --nftInSlotCount;
+
     list[_slotId].locked = false;
     list[_slotId].assetAddress = address(0);
     list[_slotId].tokenId = 0;
-    list[_slotId].randomnessChance = 0;
     list[_slotId].pendingWinnerToClaim = false;
     list[_slotId].winner = address(0);
 
     if (lastQueue > firstQueue) {
       ReserveNft memory reserve = _dequeue();
 
+      ++nftInSlotCount;
+
       list[_slotId].locked = true;
       list[_slotId].assetAddress = reserve.assetAddress;
       list[_slotId].tokenId = reserve.tokenId;
-      list[_slotId].randomnessChance = reserve.randomnessChance;
       list[_slotId].pendingWinnerToClaim = false;
       list[_slotId].winner = address(0);
     }
@@ -230,16 +233,11 @@ contract LuckBox is
   // randomness value -> 1% = 100, 10% = 1000 and not allows more than 10% per each slot
   function depositNft(
     uint8 _slotId,
-    uint256 _randomness,
     address _assetAddress,
     uint256 _tokenId
   ) public nonReentrant onlyOwner {
     require(MAX_SLOT > _slotId, "Invalid slot ID");
-    require(
-      2000 >= _randomness && _randomness >= 1,
-      "Randomness value must be between 0-2000"
-    );
-    // require(_is1155 == false, "Not supported ERC-1155 yet");
+
     require(list[_slotId].locked == false, "The slot is occupied");
 
     // take the NFT
@@ -248,17 +246,19 @@ contract LuckBox is
         address(this),
         _tokenId
     );
+    
+    ++nftInSlotCount;
 
     list[_slotId].locked = true;
     list[_slotId].assetAddress = _assetAddress;
     list[_slotId].tokenId = _tokenId;
-    list[_slotId].randomnessChance = _randomness;
     list[_slotId].pendingWinnerToClaim = false;
 
-    emit DepositedNft(_slotId, _assetAddress, _tokenId, _randomness);
+
+    emit DepositedNft(_slotId, _assetAddress, _tokenId);
   }
 
-  function withdrawNft(uint8 _slotId) public nonReentrant onlyOwner {
+  function withdrawNft(uint256 _slotId) public nonReentrant onlyOwner {
     require(MAX_SLOT > _slotId, "Invalid slot ID");
     require(list[_slotId].locked == true, "The slot is empty");
     require(
@@ -272,10 +272,11 @@ contract LuckBox is
         list[_slotId].tokenId
     );
 
+    --nftInSlotCount;
+
     list[_slotId].locked = false;
     list[_slotId].assetAddress = address(0);
     list[_slotId].tokenId = 0;
-    list[_slotId].randomnessChance = 0;
     list[_slotId].pendingWinnerToClaim = false;
 
     emit WithdrawnNft(_slotId);
@@ -283,7 +284,6 @@ contract LuckBox is
 
   function stackNft(
     address _assetAddress,
-    uint256 _randomness,
     uint256 _tokenId
   ) public {
     // take the NFT
@@ -295,13 +295,12 @@ contract LuckBox is
 
     ReserveNft memory reserve = ReserveNft({
       assetAddress: _assetAddress,
-      randomnessChance: _randomness,
       tokenId: _tokenId
     });
 
     _enqueue(reserve);
 
-    emit StackedNft(_assetAddress, _tokenId, _randomness);
+    emit StackedNft(_assetAddress, _tokenId);
   }
 
   function withdrawERC20(address _tokenAddress, uint256 _amount)
@@ -323,52 +322,76 @@ contract LuckBox is
   }
   // PRIVATE FUNCTIONS
 
-  function _parseRandomUInt256(uint256 input) internal pure returns (uint256) {
-    return input.mod(10000);
+  function _parseRandomUInt256(uint256 input) internal view returns (uint256) {
+    return input.mod(nftInSlotCount);
   }
 
+  // function _draw(
+  //   uint256 _randomNumber,
+  //   address _drawer,
+  //   bytes32 _requestId
+  // ) internal {
+  //   uint256 parsed = _parseRandomUInt256(_randomNumber); // parse into 0-10000 or 0.00-100.00%
+  //   uint256 increment = 0;
+  //   bool won = false;
+  //   uint8 winningSlot = 0;
+  //   address winningAssetAddress = address(0);
+  //   uint256 winningTokenId = 0;
+
+  //   for (uint8 i = 0; i < MAX_SLOT; i++) {
+  //     Slot storage slot = list[i];
+  //     if (slot.locked && slot.pendingWinnerToClaim == false) {
+  //       increment += slot.randomnessChance;
+  //       // keep incrementing until the random number has been hitted
+  //       if (increment > parsed && !won) {
+  //         slot.pendingWinnerToClaim = true;
+  //         slot.winner = _drawer;
+
+  //         won = true;
+  //         winningSlot = i;
+  //         winningAssetAddress = slot.assetAddress;
+  //         winningTokenId = slot.tokenId;
+  //         _claimNft(winningSlot);
+  //       }
+  //     }
+  //   }
+
+  //   // keep track of the result
+  //   result[resultCount].requestId = _requestId;
+  //   result[resultCount].drawer = _drawer;
+  //   result[resultCount].won = won;
+  //   result[resultCount].slot = winningSlot;
+  //   result[resultCount].output = parsed;
+  //   result[resultCount].eligibleRange = increment;
+
+  //   resultCount += 1;
+
+  //   emit Drawn(_drawer, won, winningAssetAddress, winningTokenId);
+  // }
+
+
+  //new draw
   function _draw(
     uint256 _randomNumber,
     address _drawer,
     bytes32 _requestId
   ) internal {
-    uint256 parsed = _parseRandomUInt256(_randomNumber); // parse into 0-10000 or 0.00-100.00%
-    uint256 increment = 0;
-    bool won = false;
-    uint8 winningSlot = 0;
-    address winningAssetAddress = address(0);
-    uint256 winningTokenId = 0;
 
-    for (uint8 i = 0; i < MAX_SLOT; i++) {
-      Slot storage slot = list[i];
-      if (slot.locked && slot.pendingWinnerToClaim == false) {
-        increment += slot.randomnessChance;
-        // keep incrementing until the random number has been hitted
-        if (increment > parsed && !won) {
-          slot.pendingWinnerToClaim = true;
-          slot.winner = _drawer;
+    uint256 winningSlot = _parseRandomUInt256(_randomNumber); //random slot 
 
-          won = true;
-          winningSlot = i;
-          winningAssetAddress = slot.assetAddress;
-          winningTokenId = slot.tokenId;
-          _claimNft(winningSlot);
-        }
-      }
-    }
+    _claimNft(winningSlot);
 
     // keep track of the result
     result[resultCount].requestId = _requestId;
     result[resultCount].drawer = _drawer;
-    result[resultCount].won = won;
+    result[resultCount].won = true;
     result[resultCount].slot = winningSlot;
-    result[resultCount].output = parsed;
-    result[resultCount].eligibleRange = increment;
 
     resultCount += 1;
 
-    emit Drawn(_drawer, won, winningAssetAddress, winningTokenId);
+    emit Drawn(_drawer, true, list[winningSlot].assetAddress, list[winningSlot].tokenId);
   }
+
 
   function _enqueue(ReserveNft memory _data) private {
     lastQueue += 1;
@@ -380,7 +403,6 @@ contract LuckBox is
 
     ReserveNft memory data = ReserveNft({
       assetAddress: reserveQueue[firstQueue].assetAddress,
-      randomnessChance: reserveQueue[firstQueue].randomnessChance,
       tokenId: reserveQueue[firstQueue].tokenId
     });
 
@@ -392,5 +414,10 @@ contract LuckBox is
   function _safeTransferETH(address to, uint256 value) internal {
     (bool success, ) = to.call{ value: value }(new bytes(0));
     require(success, "TransferHelper::safeTransferETH: ETH transfer failed");
+  }
+
+  //CUSTOM
+  function getNFTSlotCount() public view returns(uint256) {
+    return nftInSlotCount;
   }
 }
