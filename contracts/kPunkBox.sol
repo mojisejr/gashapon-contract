@@ -14,6 +14,8 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
+import "hardhat/console.sol";
+
 
 interface IFactory {
   function devAddr() external pure returns (address);
@@ -169,6 +171,8 @@ contract LuckBox is
     require(list[_slotId].winner == msg.sender, "The caller is not the winner");
     require(nftInSlotCount > 0, "no nft to be claimed");
 
+    // console.log("before claim: %s", nftInSlotCount);
+
     IERC721(list[_slotId].assetAddress).safeTransferFrom(
         address(this),
         msg.sender,
@@ -177,6 +181,7 @@ contract LuckBox is
 
     //update current avaliable nft amount
     --nftInSlotCount;
+    // console.log("after claim: %s", nftInSlotCount);
 
     list[_slotId].locked = false;
     list[_slotId].assetAddress = address(0);
@@ -184,7 +189,8 @@ contract LuckBox is
     list[_slotId].pendingWinnerToClaim = false;
     list[_slotId].winner = address(0);
 
-    if (lastQueue > firstQueue) {
+
+    if (lastQueue >= firstQueue) {
       ReserveNft memory reserve = _dequeue();
 
       ++nftInSlotCount;
@@ -205,15 +211,14 @@ contract LuckBox is
   function forceDraw(uint256 _randomNumber)
     public
     payable
-    onlyOwner
     nonReentrant
   {
-    require(msg.value == ticketPrice, "Payment is not attached");
+    // require(msg.value == ticketPrice, "Payment is not attached");
 
-    if (address(factory) != address(0)) {
-      uint256 feeAmount = ticketPrice.mul(factory.feePercent()).div(10000);
-      _safeTransferETH(factory.devAddr(), feeAmount);
-    }
+    // if (address(factory) != address(0)) {
+    //   uint256 feeAmount = ticketPrice.mul(factory.feePercent()).div(10000);
+    //   _safeTransferETH(factory.devAddr(), feeAmount);
+    // }
 
     _draw(_randomNumber, msg.sender, "0x00");
   }
@@ -379,6 +384,8 @@ contract LuckBox is
 
     //random the slot number of the available array
     uint256 winningSlot = _parseRandomUInt256(_randomNumber); //random slot 
+    // console.log("winning slot: %s", winningSlot);
+
     //prepare the slot array
     uint256[] memory availableSlot = new uint256[](nftInSlotCount);
 
@@ -394,6 +401,10 @@ contract LuckBox is
 
     //get slot tobe claimed
     uint256 tobeClaimed = availableSlot[winningSlot];
+    list[tobeClaimed].pendingWinnerToClaim = true;
+    list[tobeClaimed].winner = msg.sender;
+
+    // console.log("token to be claimed: %s", tobeClaimed);
 
     //inner claim function with won slot
     _claimNft(tobeClaimed);
@@ -434,7 +445,7 @@ contract LuckBox is
   }
 
   //CUSTOM
-  function getNFTSlotCount() public view returns(uint256) {
+  function getNFTinSlotCount() public view returns(uint256) {
     return nftInSlotCount;
   }
 }
