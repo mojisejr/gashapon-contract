@@ -36,7 +36,8 @@ contract kPunkBoxFactory is ReentrancyGuard, Ownable {
   uint256 public COOLDOWN = 3 seconds;
   uint256 public timestamp;
 
-  bytes32 public randomNonce;
+  //nonce for only dev purpose
+  bytes32 public randomNonce = 0xd28e8860b2ebd608c02124274c0d9988d526a48f7f6ac34b51edd7e187e04610;
 
   event LuckboxCreated(address indexed _address);
   event SetFee(uint256 _fee);

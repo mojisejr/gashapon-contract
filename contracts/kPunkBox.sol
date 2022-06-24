@@ -120,10 +120,8 @@ contract LuckBox is
   }
 
   // pays $MATIC to draws a gacha
-  function draw(bytes32[] memory proofs, bytes32 leafNode) public payable nonReentrant {
+  function draw() public payable nonReentrant {
     require(msg.value == ticketPrice, "Payment is not attached");
-    require(proofs.length > 0, "invalid proofs");
-    require(MerkleProof.verify(proofs, factory.randomNonce(), leafNode), 'invalid merkle info');
 
     if (address(factory) != address(0)) {
       uint256 feeAmount = ticketPrice.mul(factory.feePercent()).div(10000);
@@ -132,7 +130,7 @@ contract LuckBox is
 
     uint256 hashRandomNumber = uint256(
       keccak256(
-        abi.encodePacked(block.timestamp, msg.sender, factory.randomNonce(), leafNode, address(this))
+        abi.encodePacked(block.timestamp, msg.sender, factory.randomNonce(), address(this), block.number)
       )
     );
 
@@ -283,7 +281,7 @@ contract LuckBox is
     list[_slotId].assetAddress = address(0);
     list[_slotId].tokenId = 0;
     list[_slotId].pendingWinnerToClaim = false;
-
+    console.log("in slot after withdrawal %s", nftInSlotCount);
     emit WithdrawnNft(_slotId);
   }
 
@@ -384,7 +382,8 @@ contract LuckBox is
 
     //random the slot number of the available array
     uint256 winningSlot = _parseRandomUInt256(_randomNumber); //random slot 
-    // console.log("winning slot: %s", winningSlot);
+    uint256 arraySlotNumber = 0;
+    console.log("winning slot: %s", winningSlot);
 
     //prepare the slot array
     uint256[] memory availableSlot = new uint256[](nftInSlotCount);
@@ -392,7 +391,9 @@ contract LuckBox is
     //loop and check if the slot is empty or not?, if not push it to array
     for(uint256 i = 0; i < MAX_SLOT;) {
       if(list[i].locked == true) {
-        availableSlot[i] = i;
+        availableSlot[arraySlotNumber] = i;
+        console.log("slot no: %s", arraySlotNumber);
+        ++arraySlotNumber;
       }
       unchecked {
          ++i;

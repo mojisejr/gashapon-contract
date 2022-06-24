@@ -4,6 +4,7 @@
   "description": "kpunk gashapon machine for ERC721.",
   "main": "index.js",
   "scripts": {
+    "getrandom": "cd scripts && node merklerandom.js",
     "test": "npx hardhat test"
   },
   "keywords": [
@@ -13,7 +14,9 @@
   "license": "MIT",
   "dependencies": {
     "@openzeppelin/contracts": "^4.6.0",
-    "dotenv": "^16.0.0"
+    "dotenv": "^16.0.0",
+    "keccak256": "^1.0.6",
+    "merkletreejs": "^0.2.32"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.5",

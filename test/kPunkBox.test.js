@@ -1,16 +1,21 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const { MerkleTree } = require("merkletreejs");
+const keccak256 = require("keccak256");
+const whitelist = require("../scripts/randomhash.json");
 
 let box;
 let nft;
 let owner;
 let minter;
+let dev;
 
 describe("gashapon contract testing", () => {
   before(async () => {
-    [owner, minter] = await ethers.getSigners();
+    [owner, minter, dev] = await ethers.getSigners();
     let nftFactory = await ethers.getContractFactory("NFT1");
     let boxFactory = await ethers.getContractFactory("LuckBox");
+    let factoryFactory = await ethers.getContractFactory("kPunkBoxFactory");
 
     //Deploy and mint nft to owner;
     nft = await nftFactory.deploy();
@@ -21,11 +26,14 @@ describe("gashapon contract testing", () => {
       await nft.mint();
     }
 
+    let factory = await factoryFactory.deploy(dev.address);
+    await factory.deployed();
+
     box = await boxFactory.deploy(
       "kPunkBox No.1",
       "KPUNK",
       ethers.utils.parseEther("0.01"),
-      ethers.constants.AddressZero
+      factory.address
     );
 
     await box.deployed();
@@ -33,6 +41,7 @@ describe("gashapon contract testing", () => {
     console.log("deployed addresses:", {
       nft: nft.address,
       box: box.address,
+      factory: factory.address,
     });
   });
 
@@ -116,5 +125,10 @@ describe("gashapon contract testing", () => {
 
     const list = await box.list(0);
     expect(list.locked).to.false;
+  });
+
+  it("should be able to draw (actual function)", async () => {
+    const options = { value: ethers.utils.parseEther("0.01") };
+    await box.connect(minter).draw(options);
   });
 });
