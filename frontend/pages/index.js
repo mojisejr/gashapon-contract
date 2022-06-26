@@ -1,5 +1,7 @@
 // import Head from "next/head";
-// import Image from "next/image";
+
+import Link from "next/link";
+import Header from "../components/Header";
 // import styles from "../styles/Home.module.css";
 
 import { ConnectButton } from "../components/ConnectButton";
@@ -23,31 +25,7 @@ export default function Home() {
 
   useEffect(() => {
     wallet.checkProvider();
-    if (wallet.walletState == WalletState.READY) {
-      factory.init(wallet.eth);
-      nft.init(wallet.eth);
-      box.init(wallet.eth);
-    } else {
-      console.log("wallet connect error");
-    }
-
-    if (nft.state === ContractState.READY) {
-      nft.getCurrentTokenId().then((tokenId) => {
-        setCurrentTokenId(tokenId);
-        console.log("currentTokenId", tokenId);
-      });
-    }
-
-    if (factory.state === ContractState.READY) {
-      factory.getAllBoxes().then((boxes) => {
-        setBoxList(boxes);
-      });
-    }
-
-    if (box.state === ContractState.READY) {
-      box.getList();
-    }
-  }, [wallet.walletState, nft.state, factory.state, box.state]);
+  }, []);
 
   async function handleConnection(event) {
     event.preventDefault();
@@ -97,110 +75,40 @@ export default function Home() {
     }
   }
   return (
-    <div className="h-screen w-screen space-y-3 mt-5 ml-5">
-      <div className="text-xl">currentTokenId: {currentTokenId}</div>
-
-      <ConnectButton
-        account={wallet.account}
-        handleConnection={handleConnection}
-      />
-      <div id="menu" className="flex gap-2">
-        <NFTMintButton handleNftMinting={handleMintNFT} />
-      </div>
-      <CreateNewBoxForm handleFormSubmit={handleFormSubmit} />
-      <DepositNFTForm handleDepositSubmit={handleDepositNFT} />
-      <div className="text-xl">
-        <ul className="space-y-2">
-          {boxList.map((item, index) => (
-            <li key={index}>
-              <GashaBox box={item} onDraw={handleDraw} />
-            </li>
-          ))}
-        </ul>
-      </div>
+    <div
+      id="main-section"
+      className="h-screen w-screen flex flex-col justify-between"
+    >
+      <Header>
+        <MainMenu />
+      </Header>
+      <Footer />
     </div>
   );
 }
 
-function DepositNFTForm({ handleDepositSubmit }) {
+function MainMenu() {
   return (
-    <div className="p-2 bg-slate-300 w-[500px] border-2 border-black shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-      <div className="text-xl underline mb-2">deposit nft</div>
-      <form className="space-y-2" onSubmit={handleDepositSubmit}>
-        <div name="control-box">
-          <lable htmlFor="box-name">slot id: </lable>
-          <input
-            id="box-name"
-            className="p-1 border-[2px]"
-            type="text"
-            placeholder="slot id"
-          ></input>
-        </div>
-        <div name="control-box">
-          <lable htmlFor="box-symbol">nft address: </lable>
-          <input
-            id="box-symbol"
-            className="p-1 border-[2px]"
-            type="text"
-            placeholder="nft address"
-          ></input>
-        </div>
-        <div name="control-box">
-          <lable htmlFor="box-contract-address">token id: </lable>
-          <input
-            id="box-contract-address"
-            className="p-1 border-[2px]"
-            type="text"
-            placeholder="token Id"
-          ></input>
-        </div>
-        <div name="control-box">
-          <lable htmlFor="box-price">randomness: </lable>
-          <input
-            id="box-price"
-            className="p-1 border-[2px]"
-            type="text"
-            placeholder="randomness"
-          ></input>
-        </div>
-        <div id="button-group" className="flex gap-5">
-          <button
-            id="btn-ok"
-            className="bg-blue-500 hover:text-white pl-2 pr-2 pt-1 pb-1 border-2 border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-            type="submit"
-          >
-            deposit
-          </button>
-          <button
-            id="btn-reset"
-            className="bg-red-500 hover:text-white pl-2 pr-2 pt-1 pb-1 border-2 border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-            type="reset"
-          >
-            Reset
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function GashaBox({ box, onDraw }) {
-  return (
-    <div>
-      <div
-        id="gasha-box"
-        className="p-3 bg-slate-200 border-2 border-black  w-[500px] h-full"
-      >
-        <div>gasha name: {box.name}</div>
-        <div>gasha symbol: {box.symbol}</div>
-        <div>gasha owner: {box.owner}</div>
-        <div>gasha nftAddress: {box.contractAddress}</div>
-        <button
-          onClick={onDraw}
-          className="bg-amber-500 hover:text-white pl-2 pr-2 pt-1 pb-1 border-2 border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-        >
-          draw
+    <div class="nes-container with-title flex flex-col gap-2">
+      <p class="title">Menu</p>
+      <button className="nes-btn is-warning">Market</button>
+      <Link href="/create">
+        <button className="nes-btn is-success hover:is-primary">
+          Create Machine
         </button>
+      </Link>
+      <button className="nes-btn is-primary">Document</button>
+    </div>
+  );
+}
+
+function Footer() {
+  return (
+    <div className="flex justify-between p-2 items-center">
+      <div>Punkkub Copyright 2022</div>
+      <div id="icon-list" className="flex gap-2">
+        <i className="nes-icon twitter is-medium"></i>
+        <i className="nes-icon facebook is-medium"></i>
       </div>
     </div>
   );

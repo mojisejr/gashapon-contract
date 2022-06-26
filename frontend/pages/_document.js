@@ -16,6 +16,11 @@ class MyDocument extends Document {
             rel="stylesheet"
             crossOrigin="true"
           />
+          <link
+            href="https://unpkg.com/nes.css@2.3.0/css/nes.min.css"
+            rel="stylesheet"
+            crossOrigin="true"
+          />
         </Head>
         <body>
           <Main />
