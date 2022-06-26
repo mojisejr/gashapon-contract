@@ -2,11 +2,8 @@
 
 import Link from "next/link";
 import Header from "../components/Header";
+import Footer from "../components/Footer";
 // import styles from "../styles/Home.module.css";
-
-import { ConnectButton } from "../components/ConnectButton";
-import { NFTMintButton } from "../components/NFTMintButton";
-import { CreateNewBoxForm } from "../components/CreateNewBoxForm";
 
 import { useEffect, useState } from "react";
 import { useWallet, WalletState } from "../hooks/walletConnect";
@@ -91,25 +88,16 @@ function MainMenu() {
   return (
     <div class="nes-container with-title flex flex-col gap-2">
       <p class="title">Menu</p>
-      <button className="nes-btn is-warning">Market</button>
+      <Link href="/market">
+        <button className="nes-btn is-warning">Market</button>
+      </Link>
       <Link href="/create">
         <button className="nes-btn is-success hover:is-primary">
           Create Machine
         </button>
       </Link>
+      <button className="nes-btn is-error">your profile</button>
       <button className="nes-btn is-primary">Document</button>
-    </div>
-  );
-}
-
-function Footer() {
-  return (
-    <div className="flex justify-between p-2 items-center">
-      <div>Punkkub Copyright 2022</div>
-      <div id="icon-list" className="flex gap-2">
-        <i className="nes-icon twitter is-medium"></i>
-        <i className="nes-icon facebook is-medium"></i>
-      </div>
     </div>
   );
 }
