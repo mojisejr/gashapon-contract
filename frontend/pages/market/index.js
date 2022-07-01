@@ -4,22 +4,28 @@ import Header from "../../components/Header";
 import Footer from "../../components/Footer";
 
 import logo from "../../public/images/PunkKub-logo.png";
-function MarketPage() {
+
+import { ethers } from "ethers";
+import * as factoryAbi from "../../abi/factory";
+import * as boxAbi from "../../abi/box";
+
+function MarketPage({ boxes }) {
   return (
     <div className="w-screen">
       <Header />
-      <div className="flex flex-col gap-3">
-        <MarketItem id={1} />
-        <MarketItem id={2} />
-        <MarketItem id={3} />
-      </div>
+      {/* <div className="flex flex-col gap-3">
+        {boxes.map((box) => (
+          <MarketItem key={box.contracAddress} box={box} />
+        ))}
+      </div> */}
 
       <Footer />
     </div>
   );
 }
 
-function MarketItem({ id }) {
+function MarketItem({ box }) {
+  const [name, symbol, owner, contractAddress] = box;
   return (
     <div id="wrapper" className="flex justify-center">
       <div
@@ -52,20 +58,57 @@ function MarketItem({ id }) {
           </div>
         </div>
         <div id="content-wrapper" className="p-2">
-          <div id="content-title">punkkub gashapon #1</div>
+          <div id="content-title">
+            {name}: {symbol}
+          </div>
           <div id="content-detail" className="text-sm leading-[15px] mt-1">
             come come come take a chance to win this 9 exclusive NFT from
             punkkub, apekub, whatdakub only 4kub/round
           </div>
         </div>
         <div id="button-wrapper" className="p-2 flex justify-center">
-          <Link href={`/market/${id}`}>
+          <Link href={`/market/${contractAddress}`}>
             <button className="nes-btn is-success w-[80px] p-0">go!</button>
           </Link>
         </div>
       </div>
     </div>
   );
+}
+
+export async function getServerSideProps() {
+  const provider = new ethers.providers.JsonRpcProvider(
+    "https://rpc-testnet.bitkubchain.io"
+  );
+
+  const factory = new ethers.Contract(
+    factoryAbi.address,
+    factoryAbi.abi,
+    provider
+  );
+
+  const list = await factory.getAllBoxes();
+
+  const boxContracts = list.map((box) => {
+    const [name, sylbol, owner, contractAddress] = box;
+    return new ethers.Contract(contractAddress, boxAbi.abi, provider);
+  });
+
+  const items = await Promise.all(
+    boxContracts.map(async (contract) => {
+      let list = {};
+      for (let i = 0; i < 9; i++) {
+        const item = await contract.list(i);
+        list[i] = item;
+      }
+      return list;
+    })
+  );
+  console.log(items);
+
+  return {
+    props: {},
+  };
 }
 
 export default MarketPage;

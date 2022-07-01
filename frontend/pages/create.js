@@ -1,11 +1,26 @@
 import Header from "../components/Header";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Footer from "../components/Footer";
-function CreateGashaponPage() {
-  const [signIn, setSignIn] = useState(true);
 
-  function handleWalletConnect() {
-    setSignIn(!signIn);
+import { useWallet } from "../hooks/walletConnect";
+
+function CreateGashaponPage() {
+  const { eth, account, connect, checkProvider, walletState } = useWallet();
+  const [signIn, setSignIn] = useState(false);
+  const [currentAccount, setCurrentAccount] = useState(undefined);
+
+  useEffect(() => {
+    checkProvider();
+    if (account) {
+      setCurrentAccount(account);
+    }
+  }, [account]);
+
+  async function handleWalletConnect() {
+    // setSignIn(!signIn);
+    await connect().then(() => {
+      setSignIn(true);
+    });
   }
 
   return (
@@ -19,7 +34,11 @@ function CreateGashaponPage() {
       </Header>
       <div>
         {signIn ? (
-          <div className="nes-container">
+          <div className="nes-container p-2">
+            <div className="p-1 bg-blue-800 text-white">
+              {" "}
+              wallet: {currentAccount}
+            </div>
             <CreateGahaponForm />
           </div>
         ) : (
