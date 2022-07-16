@@ -1,8 +1,8 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { MerkleTree } = require("merkletreejs");
-const keccak256 = require("keccak256");
-const whitelist = require("../scripts/randomhash.json");
+// const { MerkleTree } = require("merkletreejs");
+// const keccak256 = require("keccak256");
+// const whitelist = require("../scripts/randomhash.json");
 
 let box;
 let nft;
@@ -12,7 +12,7 @@ let dev;
 
 describe("gashapon contract testing", () => {
   before(async () => {
-    [owner, minter, dev] = await ethers.getSigners();
+    [owner, minter, dev, treasury] = await ethers.getSigners();
     let nftFactory = await ethers.getContractFactory("NFT1");
     let boxFactory = await ethers.getContractFactory("LuckBox");
     let factoryFactory = await ethers.getContractFactory("kPunkBoxFactory");
@@ -26,7 +26,7 @@ describe("gashapon contract testing", () => {
       await nft.mint();
     }
 
-    let factory = await factoryFactory.deploy(dev.address);
+    let factory = await factoryFactory.deploy(dev.address, treasury.address);
     await factory.deployed();
 
     box = await boxFactory.deploy(

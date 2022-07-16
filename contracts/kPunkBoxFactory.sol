@@ -30,7 +30,9 @@ contract kPunkBoxFactory is ReentrancyGuard, Ownable {
 
   // Fee section
   address public devAddr;
-  uint256 public feePercent = 300; // 3%
+  address public treasuryAddr;
+  uint256 public devFeePercent = 150; // 1.5%
+  uint256 public treasuryFeePercent = 150; //1.5%
   uint256 public constant MAX_FEE = 1000; // 10%
 
   uint256 public COOLDOWN = 3 seconds;
@@ -39,18 +41,20 @@ contract kPunkBoxFactory is ReentrancyGuard, Ownable {
   //nonce for only dev purpose
   bytes32 public randomNonce = 0xd28e8860b2ebd608c02124274c0d9988d526a48f7f6ac34b51edd7e187e04610;
 
-  event LuckboxCreated(address indexed _address);
+  event kPunkBoxCreated(address indexed _address);
   event SetFee(uint256 _fee);
   event SetDevAddr(address _devAddr);
   event RequestedNonce(address user, uint256 timestamp);
 
-  constructor(address _devAddr)
+  constructor(address _devAddr, address _treasuryAddr) 
   {
     require(_devAddr != address(0), "Address is zero");
+    require(_treasuryAddr != address(0), "Address is zero");
     devAddr = _devAddr;
+    treasuryAddr = _treasuryAddr;
   }
 
-  function createLuckbox(
+  function createkPunkbox(
     string calldata name,
     string calldata symbol,
     uint256 ticketPrice
@@ -59,14 +63,14 @@ contract kPunkBoxFactory is ReentrancyGuard, Ownable {
 
     luckbox.transferOwnership(msg.sender);
 
-    address newLuckbox = (address(luckbox));
+    address newkPunkBox = (address(luckbox));
 
     boxes.push(
       Box({
         name: name,
         symbol: symbol,
         owner: msg.sender,
-        contractAddress: newLuckbox,
+        contractAddress: newkPunkBox,
         banned: false,
         approved: false
       })
@@ -76,7 +80,15 @@ contract kPunkBoxFactory is ReentrancyGuard, Ownable {
 
     timestamp = block.timestamp;
 
-    emit LuckboxCreated(newLuckbox);
+    emit kPunkBoxCreated(newkPunkBox);
+  }
+
+  function getAllBoxes() external view returns(Box[] memory) {
+    return boxes;
+  }
+
+  function getBoxCount() external view returns(uint256) {
+    return boxes.length;
   }
 
   function getBoxOwner(uint256 _id) public view returns (address) {
@@ -115,12 +127,24 @@ contract kPunkBoxFactory is ReentrancyGuard, Ownable {
     emit SetDevAddr(devAddr);
   }
 
-  function setFee(uint256 _feePercent) public onlyOwner nonReentrant {
+  function setDevFee(uint256 _feePercent) public onlyOwner nonReentrant {
     require(_feePercent <= MAX_FEE, "Below MAX_FEE Please");
-    feePercent = _feePercent;
+    devFeePercent = _feePercent;
 
-    emit SetFee(feePercent);
+    emit SetFee(devFeePercent);
   }
+
+  function setTreasuryFee(uint256 _feePercent) public onlyOwner nonReentrant {
+    require(_feePercent <= MAX_FEE, "Below MAX_FEE Please");
+    treasuryFeePercent = _feePercent;
+    emit SetFee(treasuryFeePercent);
+  }
+
+  function setTreasuryAddress(address _newTreasury) public onlyOwner nonReentrant {
+    require(_newTreasury != address(0), "invalid address");
+    treasuryAddr = _newTreasury; 
+  }
+
 
   function setBan(uint256 _id, bool _isBan) public onlyOwner nonReentrant {
     boxes[_id].banned = _isBan;

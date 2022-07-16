@@ -1,45 +1,43 @@
-// const { expect } = require("chai");
-// const { ethers } = require("hardhat");
+const { expect } = require("chai");
+const { ethers } = require("hardhat");
 
-// let owner;
-// let minter;
+let dev;
+let creator;
+let treasury;
+let factory;
 
-// let factory;
-// let box;
+describe("Factory Contract Test", () => {
+  before(async () => {
+    [dev, creator, treasury] = await ethers.getSigners();
 
-// describe("kPunkBoxFactory contract testing", () => {
-//   before(async () => {
-//     [owner, minter] = await ethers.getSigners();
+    const factoryContract = await ethers.getContractFactory("kPunkBoxFactory");
+    factory = await factoryContract.deploy(dev.address, treasury.address);
+    await factory.deployed();
 
-//     let factoryFactory = await ethers.getContractFactory("kPunkBoxFactory");
-//     factory = await factoryFactory.deploy();
+    console.log("factory address", factory.address);
+  });
 
-//     console.log("deployed address: ", factory.address);
-//   });
+  it("should be able to create new box", async () => {
+    await factory
+      .connect(creator)
+      .createkPunkbox("new box", "NBOX", ethers.utils.parseEther("1"));
 
-//   it("should be able to create new box", async () => {
-//     await factory.createNewBox(
-//       "kPunkGasha No 1.",
-//       "KPUNK",
-//       ethers.utils.parseEther("0.01")
-//     );
+    const name = await factory.getBoxName(0);
+    console.log("boxName", name.toString());
+    expect(name.toString()).to.equal("new box");
+  });
 
-//     const currentBoxId = await factory.getCurrentBoxId();
+  it("shoud be able to create some more boxes", async () => {
+    await factory
+      .connect(creator)
+      .createkPunkbox("new box1", "NBOX", ethers.utils.parseEther("1"));
+    await factory
+      .connect(creator)
+      .createkPunkbox("new boxw", "NBOX", ethers.utils.parseEther("1"));
+  });
 
-//     let { contractAddress } = await factory.boxes(1);
-
-//     let boxFactory = await ethers.getContractFactory("kPunkBox");
-//     box = boxFactory.attach(contractAddress);
-
-//     expect(currentBoxId.toString()).to.equal("2");
-//   });
-
-//   it("check initial parameter of newly created box", async () => {
-//     const Boxname = (await box.name()).toString();
-//     const Boxsymbol = (await box.symbol()).toString();
-//     const { name, symbol } = await factory.boxes(1);
-
-//     expect(Boxname).to.equal(name);
-//     expect(Boxsymbol).to.equal(symbol);
-//   });
-// });
+  it("should be able to get box length", async () => {
+    const len = await factory.getBoxCount();
+    expect(len.toString()).to.equal("3");
+  });
+});

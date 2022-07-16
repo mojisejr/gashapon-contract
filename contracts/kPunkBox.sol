@@ -19,11 +19,10 @@ import "hardhat/console.sol";
 
 interface IFactory {
   function devAddr() external pure returns (address);
-
-  function feePercent() external pure returns (uint256);
-
+  function treasuryAddr() external pure returns (address);
+  function devFeePercent() external pure returns (uint256);
+  function treasuryFeePercent() external pure returns(uint256);
   function MAX_FEE() external pure returns (uint256);
-
   function randomNonce() external view returns (bytes32);
 
 }
@@ -124,8 +123,12 @@ contract LuckBox is
     require(msg.value == ticketPrice, "Payment is not attached");
 
     if (address(factory) != address(0)) {
-      uint256 feeAmount = ticketPrice.mul(factory.feePercent()).div(10000);
-      _safeTransferETH(factory.devAddr(), feeAmount);
+
+      uint256 devFeeAmount = ticketPrice.mul(factory.devFeePercent()).div(10000);
+      uint256 treasuryFeeAmount = ticketPrice.mul(factory.treasuryFeePercent()).div(10000);
+
+      _safeTransferETH(factory.devAddr(), devFeeAmount);
+      _safeTransferETH(factory.treasuryAddr(), treasuryFeeAmount);
     }
 
     uint256 hashRandomNumber = uint256(
