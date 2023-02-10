@@ -14,8 +14,6 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
-import "hardhat/console.sol";
-
 
 interface IFactory {
   function devAddr() external pure returns (address);
@@ -23,12 +21,14 @@ interface IFactory {
   function devFeePercent() external pure returns (uint256);
   function treasuryFeePercent() external pure returns(uint256);
   function MAX_FEE() external pure returns (uint256);
-  function randomNonce() external view returns (bytes32);
+}
 
+interface IRandomGenerator {
+  function getRandomNumber() external view returns(uint256);
 }
 
 
-contract LuckBox is
+contract ChickaponSoomKai is
   Ownable,
   ReentrancyGuard,
   IERC721Receiver,
@@ -81,6 +81,7 @@ contract LuckBox is
 
   // factory address
   IFactory public factory;
+  IRandomGenerator public generator;
 
   event UpdatedTicketPrice(uint256 ticketPrice);
   event Draw(address indexed drawer, bytes32 requestId);
@@ -107,7 +108,8 @@ contract LuckBox is
     string memory _name,
     string memory _symbol,
     uint256 _ticketPrice,
-    address _factory
+    address _factory,
+    address _generator
   ) {
     require(_ticketPrice != 0, "Invalid ticket price");
 
@@ -115,10 +117,11 @@ contract LuckBox is
     symbol = _symbol;
     ticketPrice = _ticketPrice;
     factory = IFactory(_factory);
+    generator = IRandomGenerator(_generator);
     _registerInterface(IERC721Receiver.onERC721Received.selector);
   }
 
-  // pays $MATIC to draws a gacha
+  // pays $KUB to draws a gacha
   function draw() public payable nonReentrant {
     require(msg.value == ticketPrice, "Payment is not attached");
 
@@ -131,13 +134,7 @@ contract LuckBox is
       _safeTransferETH(factory.treasuryAddr(), treasuryFeeAmount);
     }
 
-    uint256 hashRandomNumber = uint256(
-      keccak256(
-        abi.encodePacked(block.timestamp, msg.sender, factory.randomNonce(), address(this), block.number)
-      )
-    );
-
-    _draw(hashRandomNumber, msg.sender, "0x00");
+    _draw(msg.sender, "0x00");
 
     emit Draw(msg.sender, "0x00");
   }
@@ -221,7 +218,7 @@ contract LuckBox is
     //   _safeTransferETH(factory.devAddr(), feeAmount);
     // }
 
-    _draw(_randomNumber, msg.sender, "0x00");
+    _draw(msg.sender, "0x00");
   }
 
   function withdrawAllEth() public onlyOwner nonReentrant {
@@ -284,7 +281,6 @@ contract LuckBox is
     list[_slotId].assetAddress = address(0);
     list[_slotId].tokenId = 0;
     list[_slotId].pendingWinnerToClaim = false;
-    console.log("in slot after withdrawal %s", nftInSlotCount);
     emit WithdrawnNft(_slotId);
   }
 
@@ -378,15 +374,14 @@ contract LuckBox is
 
   //new draw
   function _draw(
-    uint256 _randomNumber,
     address _drawer,
     bytes32 _requestId
   ) internal {
 
     //random the slot number of the available array
-    uint256 winningSlot = _parseRandomUInt256(_randomNumber); //random slot 
+    uint256 randomNumber = generator.getRandomNumber();
+    uint256 winningSlot = _parseRandomUInt256(randomNumber); //random slot 
     uint256 arraySlotNumber = 0;
-    console.log("winning slot: %s", winningSlot);
 
     //prepare the slot array
     uint256[] memory availableSlot = new uint256[](nftInSlotCount);
@@ -395,7 +390,6 @@ contract LuckBox is
     for(uint256 i = 0; i < MAX_SLOT;) {
       if(list[i].locked == true) {
         availableSlot[arraySlotNumber] = i;
-        console.log("slot no: %s", arraySlotNumber);
         ++arraySlotNumber;
       }
       unchecked {

@@ -6,14 +6,14 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./kPunkBox.sol";
+import "./ChickaponSoomKai.sol";
 
 
 /**
  * @title Factory for creating new luckbox contract.
  */
 
-contract kPunkBoxFactory is ReentrancyGuard, Ownable {
+contract ChickaponFactory is ReentrancyGuard, Ownable {
   using SafeERC20 for IERC20;
 
   struct Box {
@@ -34,14 +34,15 @@ contract kPunkBoxFactory is ReentrancyGuard, Ownable {
   uint256 public devFeePercent = 150; // 1.5%
   uint256 public treasuryFeePercent = 150; //1.5%
   uint256 public constant MAX_FEE = 1000; // 10%
+  bool public isOpen = false;
+
+  address private generator;
 
   uint256 public COOLDOWN = 3 seconds;
   uint256 public timestamp;
 
-  //nonce for only dev purpose
-  bytes32 public randomNonce = 0xd28e8860b2ebd608c02124274c0d9988d526a48f7f6ac34b51edd7e187e04610;
 
-  event kPunkBoxCreated(address indexed _address);
+  event ChickaponSoomKaiCreated(address indexed _address);
   event SetFee(uint256 _fee);
   event SetDevAddr(address _devAddr);
   event RequestedNonce(address user, uint256 timestamp);
@@ -54,23 +55,23 @@ contract kPunkBoxFactory is ReentrancyGuard, Ownable {
     treasuryAddr = _treasuryAddr;
   }
 
-  function createkPunkbox(
+  function createChickaponSoomKai(
     string calldata name,
     string calldata symbol,
     uint256 ticketPrice
   ) external nonReentrant {
-    LuckBox luckbox = new LuckBox(name, symbol, ticketPrice, address(this));
+    ChickaponSoomKai soomkai = new ChickaponSoomKai(name, symbol, ticketPrice, address(this), generator);
 
-    luckbox.transferOwnership(msg.sender);
+    soomkai.transferOwnership(msg.sender);
 
-    address newkPunkBox = (address(luckbox));
+    address newSoomKai = (address(soomkai));
 
     boxes.push(
       Box({
         name: name,
         symbol: symbol,
         owner: msg.sender,
-        contractAddress: newkPunkBox,
+        contractAddress: newSoomKai,
         banned: false,
         approved: false
       })
@@ -80,7 +81,7 @@ contract kPunkBoxFactory is ReentrancyGuard, Ownable {
 
     timestamp = block.timestamp;
 
-    emit kPunkBoxCreated(newkPunkBox);
+    emit ChickaponSoomKaiCreated(newSoomKai);
   }
 
   function getAllBoxes() external view returns(Box[] memory) {
@@ -116,8 +117,9 @@ contract kPunkBoxFactory is ReentrancyGuard, Ownable {
   }
 
   // ADMIN FUNCTIONS
-  function setRandomNonce(bytes32 _newNonce) public onlyOwner {
-    randomNonce = _newNonce;
+
+  function setIsOpen(bool _isOpen) public onlyOwner nonReentrant {
+    isOpen = _isOpen;
   }
 
   function setDevAddr(address _devAddr) public onlyOwner nonReentrant {
@@ -143,6 +145,11 @@ contract kPunkBoxFactory is ReentrancyGuard, Ownable {
   function setTreasuryAddress(address _newTreasury) public onlyOwner nonReentrant {
     require(_newTreasury != address(0), "invalid address");
     treasuryAddr = _newTreasury; 
+  }
+
+  function setGenerator(address _generator) public onlyOwner nonReentrant {
+    require(_generator != address(0), "invalid address");
+    generator = _generator;
   }
 
 

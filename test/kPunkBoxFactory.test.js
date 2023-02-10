@@ -10,7 +10,7 @@ describe("Factory Contract Test", () => {
   before(async () => {
     [dev, creator, treasury] = await ethers.getSigners();
 
-    const factoryContract = await ethers.getContractFactory("kPunkBoxFactory");
+    const factoryContract = await ethers.getContractFactory("ChickaponFactory");
     factory = await factoryContract.deploy(dev.address, treasury.address);
     await factory.deployed();
 
